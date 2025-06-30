@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import './App.css';
 
 const initialCodeC = `int a = 0;
@@ -10,129 +10,128 @@ while (x == 2);`;
 
 const initialCodeSwift = `let playerName: String = "Kratos"
 var playerLevel: Int = 1
-playerLevel = 2
-
-// Error: Intentar cambiar una constante (let)
+// Error: Intentar cambiar una constante
 playerName = "Fantasma de Esparta"`;
 
+const initialCodeJava = `public class ejercicio {
+  public static void main(String[] args) {
+    int edad = 22;
+    String escuela = "upchiapas";
+    if (edad > 18) {
+      System.out.println("Mayor de edad");
+    }
+  }
+}`;
 
 function App() {
-  const [code, setCode] = useState(initialCodeC);
-  const [results, setResults] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [language, setLanguage] = useState('c_simple');
+  const [code, setCode] = useState(initialCodeJava);
+  const [analysisResult, setAnalysisResult] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [language, setLanguage] = useState('java');
 
   const handleLanguageChange = (e) => {
     const newLang = e.target.value;
     setLanguage(newLang);
-    if (newLang === 'swift') {
-      setCode(initialCodeSwift);
-    } else {
-      setCode(initialCodeC);
-    }
-    setResults(null); 
-  }
+    if (newLang === 'swift') { setCode(initialCodeSwift); } 
+    else if (newLang === 'c') { setCode(initialCodeC); }
+    else { setCode(initialCodeJava); }
+    setAnalysisResult(null); 
+  };
 
-  const handleAnalyze = async () => {
-    setLoading(true);
-    setResults(null);
+  const handleAnalyze = useCallback(async () => {
+    setIsLoading(true);
+    setAnalysisResult(null);
     try {
       const response = await fetch('http://localhost:8080/analyze', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code, language }),
       });
       const data = await response.json();
-      setResults(data);
+      setAnalysisResult(data);
     } catch (error) {
-      console.error("Error al conectar con el backend:", error);
-      alert("No se pudo conectar con el servidor de Go. ¿Está encendido?");
+      setAnalysisResult({ error: 'Error de conexión con el backend.' });
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  };
+  }, [code, language]);
 
-  const renderTable = () => {
-    if (!results || !results.lexicalTokens) return null;
-    const totals = { PR: 0, ID: 0, Numeros: 0, Simbolos: 0, String: 0 };
-    results.lexicalTokens.forEach(token => {
-      switch (token.Type) {
-        case 0: totals.PR++; break;
-        case 1: totals.ID++; break;
-        case 2: totals.Numeros++; break;
-        case 3: totals.String++; break; 
-        case 4: totals.Simbolos++; break; 
-      }
-    });
-
-    return (
-      <div className="results-table">
-        <h3>Analizador Léxico</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Tokens</th>
-              <th>PR/Tipo</th>
-              <th>ID</th>
-              <th>Numero</th>
-              <th>String</th>
-              <th>Simbolo</th>
-            </tr>
-          </thead>
-          <tbody>
-            {results.lexicalTokens.map((token, index) => (
-              <tr key={index}>
-                <td>{token.lexeme}</td>
-                <td>{token.type === 0 ? 'x' : ''}</td>
-                <td>{token.type === 1 ? 'x' : ''}</td>
-                <td>{token.type === 2 ? 'x' : ''}</td>
-                <td>{token.type === 3 ? 'x' : ''}</td>
-                <td>{token.type === 4 ? 'x' : ''}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  };
+  const hasSyntaxError = analysisResult?.syntaxResult?.toLowerCase().startsWith('error');
+  const hasSemanticError = analysisResult?.semanticResult?.toLowerCase().startsWith('error');
 
   return (
     <div className="App">
-      <header className="App-header">
-        <h1>Analizador Multi-Lenguaje</h1>
-        <div className="container">
-          <div className="editor">
-            <h3>Selecciona el Lenguaje</h3>
-            <select value={language} onChange={handleLanguageChange} className="language-selector">
-                <option value="c_simple">Lenguaje Simple C</option>
-                <option value="swift">Swift</option>
-            </select>
-
-            <h3>Código Fuente</h3>
-            <textarea
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              rows="15"
-              cols="50"
-            />
-            <button onClick={handleAnalyze} disabled={loading}>
-              {loading ? 'Analizando...' : 'Analizar'}
-            </button>
-          </div>
-          <div className="results">
-            {renderTable()}
-            {results && (
-              <div className="analysis-results">
-                <h3>Análisis Sintáctico y Semántico</h3>
-                <p>{results.syntaxResult}</p>
-                <p className="semantic-error">{results.semanticResult}</p>
-              </div>
-            )}
-          </div>
+      <div className="ide-container">
+        <h1>Analizador</h1>
+        <div className="editor-container">
+          <select value={language} onChange={handleLanguageChange} className="language-selector">
+              <option value="c">C</option>
+              <option value="swift">Swift</option>
+              <option value="java">Java</option>
+          </select>
+          <textarea
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            className="code-editor"
+            spellCheck="false"
+          />
+          <button onClick={handleAnalyze} disabled={isLoading} className="analyze-button">
+            {isLoading ? 'Analizando...' : 'Analizar Código'}
+          </button>
         </div>
-      </header>
+      </div>
+
+      {analysisResult && (
+        <div className="results-container">
+          {analysisResult.error ? (
+            <div className="analysis-card error-card">
+              <h3>Error de Conexión</h3>
+              <p>{analysisResult.error}</p>
+            </div>
+          ) : (
+            <>
+              <div className="analysis-card">
+                <h3>Análisis Léxico</h3>
+                <table className="token-table detailed-table">
+                  <thead>
+                    <tr>
+                      <th>Tokens</th>
+                      <th>PR/Tipo</th>
+                      <th>ID</th>
+                      <th>Numero</th>
+                      <th>String</th>
+                      <th>Simbolo</th>
+                      <th>Error</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analysisResult.lexicalTokens.map((token, index) => (
+                      <tr key={index}>
+                        <td>{token.lexeme}</td>
+                        <td>{token.type === 0 ? 'x' : ''}</td>
+                        <td>{token.type === 1 ? 'x' : ''}</td>
+                        <td>{token.type === 2 ? 'x' : ''}</td>
+                        <td>{token.type === 3 ? 'x' : ''}</td>
+                        <td>{token.type === 4 ? 'x' : ''}</td>
+                        <td>{token.type === 5 ? 'x' : ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className={`analysis-card ${hasSyntaxError ? 'has-error' : ''}`}>
+                <h3 className={hasSyntaxError ? 'title-error' : ''}>Análisis Sintáctico</h3>
+                <p>{analysisResult.syntaxResult}</p>
+              </div>
+              
+              <div className={`analysis-card ${hasSemanticError ? 'has-error' : ''}`}>
+                <h3 className={hasSemanticError ? 'title-error' : ''}>Análisis Semántico</h3>
+                <p>{analysisResult.semanticResult}</p>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
